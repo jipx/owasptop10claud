@@ -1,0 +1,41 @@
+{
+  "info": {
+    "name": "OWASP Claude API Test",
+    "description": "Postman collection to test the OWASP Assistant API Gateway endpoint (Claude via Bedrock)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Test Claude OWASP Prompt",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"prompt\": \"Explain SQL Injection in simple terms\"\n}"
+        },
+        "url": {
+          "raw": "https://your-api-id.execute-api.us-east-1.amazonaws.com/prod/ask",
+          "protocol": "https",
+          "host": [
+            "your-api-id",
+            "execute-api",
+            "us-east-1",
+            "amazonaws",
+            "com"
+          ],
+          "path": [
+            "prod",
+            "ask"
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}
