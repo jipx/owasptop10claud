@@ -1,0 +1,35 @@
+
+name: Deploy to Streamlit Cloud
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Create Streamlit secrets.toml
+        run: |
+          mkdir -p ~/.streamlit
+          echo "AWS_ACCESS_KEY_ID = '${{ secrets.AWS_ACCESS_KEY_ID }}'
+AWS_SECRET_ACCESS_KEY = '${{ secrets.AWS_SECRET_ACCESS_KEY }}'
+BEDROCK_REGION = '${{ secrets.BEDROCK_REGION }}'
+" > ~/.streamlit/secrets.toml
+
+      - name: Deploy to Streamlit Cloud
+        run: echo "Deployment triggered by push to main branch."
