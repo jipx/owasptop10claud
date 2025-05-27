@@ -2,7 +2,6 @@ import streamlit as st
 import requests
 import json
 import streamlit.components.v1 as components
-from admin_panel import admin_settings_panel
 
 st.set_page_config(page_title="OWASP AI Assistant", layout="wide")
 
@@ -16,6 +15,7 @@ def speak_text(text):
     """
     components.html(js)
 
+# Section banner helper
 def banner(title: str, color: str = "#1f77b4"):
     st.markdown(f"""
     <div style='padding: 0.75em; margin: 1em 0; background-color: {color}; color: white;
@@ -24,7 +24,7 @@ def banner(title: str, color: str = "#1f77b4"):
     </div>
     """, unsafe_allow_html=True)
 
-# Sidebar
+# Sidebar menu with icons
 page = st.sidebar.radio(
     "Navigation",
     [
@@ -33,11 +33,11 @@ page = st.sidebar.radio(
         "🎓 Mimosa (for tutor only)",
         "☁️ Cloud Security",
         "🤖 LLM Application Security",
-        "🧠 Adaptive Quiz",
-        "⚙️ Administrator Settings"
+        "🧠 Adaptive Quiz"
     ]
 )
 
+# Sidebar model selector
 model_choice = st.sidebar.selectbox(
     "Choose a model",
     ["Claude 3.5 Sonnet", "Claude v2", "DeepSeek-V2 Chat"]
@@ -51,7 +51,6 @@ model_id_map = {
 
 selected_model_id = model_id_map[model_choice]
 
-# Page logic
 if page == "🧠 Adaptive Quiz":
     banner("🧠 Adaptive Quiz Generator", "#444444")
     difficulty = st.selectbox("Choose difficulty", ["Beginner", "Intermediate", "Advanced"])
@@ -76,11 +75,6 @@ if page == "🧠 Adaptive Quiz":
                     st.code(output)
             except Exception as e:
                 st.error(f"Error: {e}")
-
-elif page == "⚙️ Administrator Settings":
-    banner("⚙️ Administrator Control Panel", "#333333")
-    admin_settings_panel(model_id_map)
-
 else:
     section_colors = {
         "🔐 OWASP Top 10": "#d7263d",
