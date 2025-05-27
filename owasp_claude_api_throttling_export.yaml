@@ -1,18 +1,12 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: OWASP Assistant API Gateway + Lambda + Claude via Bedrock
+Description: OWASP Assistant - Claude Integration via Amazon Bedrock (Inline Lambda)
 
 Resources:
 
-  OWASPClaudeLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: /aws/apigateway/owasp-claude-api
-      RetentionInDays: 14
-
-  OWASPLambdaExecutionRole:
+  ClaudeLambdaRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: OWASPClaudeLambdaExecutionRole
+      RoleName: ClaudeLambdaExecutionRole
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -21,12 +15,13 @@ Resources:
               Service: lambda.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: ClaudeInvokePolicy
+        - PolicyName: AllowClaudeAndLogs
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
-                Action: bedrock:InvokeModel
+                Action:
+                  - bedrock:InvokeModel
                 Resource: "*"
               - Effect: Allow
                 Action:
@@ -35,13 +30,13 @@ Resources:
                   - logs:PutLogEvents
                 Resource: "*"
 
-  OWASPClaudeFunction:
+  ClaudeLambdaFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: OWASPClaudeHandler
+      FunctionName: ClaudeAssistantFunction
       Runtime: python3.10
       Handler: lambda_function.lambda_handler
-      Role: !GetAtt OWASPLambdaExecutionRole.Arn
+      Role: !GetAtt ClaudeLambdaRole.Arn
       Timeout: 30
       Code:
         ZipFile: |
@@ -51,96 +46,73 @@ Resources:
           bedrock = boto3.client("bedrock-runtime", region_name="us-east-1")
 
           def lambda_handler(event, context):
-              body = json.loads(event['body'])
-              prompt = body.get('prompt', '')
+              try:
+                  body = json.loads(event.get("body", "{}"))
+                  prompt = body.get("prompt", "")
 
-              bedrock_input = {
-                  "prompt": f"\n\nHuman: {prompt}\n\nAssistant:",
-                  "max_tokens_to_sample": 500,
-                  "temperature": 0.7,
-                  "stop_sequences": ["\n\nHuman:"]
-              }
+                  payload = {
+                      "prompt": f"\n\nHuman: {prompt}\n\nAssistant:",
+                      "max_tokens_to_sample": 300,
+                      "temperature": 0.7,
+                      "stop_sequences": ["\n\nHuman:"]
+                  }
 
-              response = bedrock.invoke_model(
-                  modelId="anthropic.claude-v2",
-                  contentType="application/json",
-                  accept="application/json",
-                  body=json.dumps(bedrock_input)
-              )
+                  response = bedrock.invoke_model(
+                      modelId="anthropic.claude-v2",
+                      contentType="application/json",
+                      accept="application/json",
+                      body=json.dumps(payload)
+                  )
 
-              result = json.loads(response['body'].read())
-              return {
-                  'statusCode': 200,
-                  'headers': {'Content-Type': 'application/json'},
-                  'body': json.dumps({'response': result['completion']})
-              }
+                  result = json.loads(response["body"].read())
 
-  OWASPClaudeAPI:
-    DependsOn: OWASPClaudeLogGroup
+                  return {
+                      "statusCode": 200,
+                      "headers": {
+                          "Content-Type": "application/json",
+                          "Access-Control-Allow-Origin": "*"
+                      },
+                      "body": json.dumps({"response": result["completion"]})
+                  }
+              except Exception as e:
+                  return {
+                      "statusCode": 500,
+                      "body": json.dumps({"error": str(e)})
+                  }
+
+  ClaudeAPI:
     Type: AWS::ApiGateway::RestApi
     Properties:
-      Name: OWASPClaudeAPI
-      EndpointConfiguration:
-        Types: ["REGIONAL"]
+      Name: ClaudeAPI
 
-  OWASPClaudeResource:
+  ClaudeResource:
     Type: AWS::ApiGateway::Resource
     Properties:
-      ParentId: !GetAtt OWASPClaudeAPI.RootResourceId
+      RestApiId: !Ref ClaudeAPI
+      ParentId: !GetAtt ClaudeAPI.RootResourceId
       PathPart: ask
-      RestApiId: !Ref OWASPClaudeAPI
 
-  OWASPClaudeMethod:
+  ClaudeMethod:
     Type: AWS::ApiGateway::Method
     Properties:
+      RestApiId: !Ref ClaudeAPI
+      ResourceId: !Ref ClaudeResource
       HttpMethod: POST
-      ResourceId: !Ref OWASPClaudeResource
-      RestApiId: !Ref OWASPClaudeAPI
       AuthorizationType: NONE
       Integration:
         IntegrationHttpMethod: POST
         Type: AWS_PROXY
-        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${OWASPClaudeFunction.Arn}/invocations
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ClaudeLambdaFunction.Arn}/invocations
 
-  LambdaInvokePermission:
+  ClaudeInvokePermission:
     Type: AWS::Lambda::Permission
     Properties:
-      FunctionName: !Ref OWASPClaudeFunction
+      FunctionName: !Ref ClaudeLambdaFunction
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
-      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${OWASPClaudeAPI}/*/*/*
-
-  OWASPClaudeUsagePlan:
-    Type: AWS::ApiGateway::UsagePlan
-    Properties:
-      UsagePlanName: OWASPClaudeBasicUsagePlan
-      Throttle:
-        RateLimit: 5
-        BurstLimit: 2
-      ApiStages:
-        - ApiId: !Ref OWASPClaudeAPI
-          Stage: prod
-
-  OWASPClaudeApiKey:
-    Type: AWS::ApiGateway::ApiKey
-    Properties:
-      Name: OWASPClaudeApiKey
-      Enabled: true
-      StageKeys:
-        - RestApiId: !Ref OWASPClaudeAPI
-          StageName: prod
-
-  UsagePlanKey:
-    Type: AWS::ApiGateway::UsagePlanKey
-    Properties:
-      KeyId: !Ref OWASPClaudeApiKey
-      KeyType: API_KEY
-      UsagePlanId: !Ref OWASPClaudeUsagePlan
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ClaudeAPI}/*/*/*
 
 Outputs:
-  ClaudeApiKey:
-    Description: "API Key to access the OWASP Claude endpoint"
-    Value: !Ref OWASPClaudeApiKey
-    Export:
-      Name: OWASPClaudeApiKey
-
+  ClaudeInvokeURL:
+    Description: "Public API URL for Claude assistant"
+    Value: !Sub "https://${ClaudeAPI}.execute-api.${AWS::Region}.amazonaws.com/prod/ask"
