@@ -1,19 +1,8 @@
 import streamlit as st
 import requests
-import json
-import streamlit.components.v1 as components
 
 st.set_page_config(page_title="OWASP AI Assistant", layout="wide")
-
-def speak_text(text):
-    js = f"""
-    <script>
-        var utterance = new SpeechSynthesisUtterance({json.dumps(text)});
-        utterance.lang = 'en-US';
-        window.speechSynthesis.speak(utterance);
-    </script>
-    """
-    components.html(js)
+st.title("OWASP Top 10 Assistant")
 
 # Section banner helper
 def banner(title: str, color: str = "#1f77b4"):
@@ -68,8 +57,6 @@ if page == "🧠 Adaptive Quiz":
                 output = result.get("response") or result.get("error") or result or "[No output returned]"
                 if response.status_code == 200:
                     st.markdown(output, unsafe_allow_html=True)
-                    if st.button("🔊 Read aloud", key="read_response"):
-                        speak_text(output)
                 else:
                     st.error(f"API Error {response.status_code}")
                     st.code(output)
@@ -102,8 +89,6 @@ else:
                         if response.status_code == 200:
                             st.success("Model Response:")
                             st.markdown(output, unsafe_allow_html=True)
-                            if st.button("🔊 Read aloud", key="read_response"):
-                                speak_text(output)
                         else:
                             st.error(f"API Error {response.status_code}")
                             st.code(output)
