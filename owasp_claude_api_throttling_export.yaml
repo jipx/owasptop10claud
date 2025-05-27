@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: OWASP Assistant - Claude Integration via Amazon Bedrock (Inline Lambda)
+Description: Claude 3.5 Sonnet via Bedrock Messages API (Inline Lambda + API Gateway)
 
 Resources:
 
@@ -22,20 +22,20 @@ Resources:
               - Effect: Allow
                 Action:
                   - bedrock:InvokeModel
-                Resource: "*"
+                Resource: '*'
               - Effect: Allow
                 Action:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
-                Resource: "*"
+                Resource: '*'
 
   ClaudeLambdaFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: ClaudeAssistantFunction
+      FunctionName: ClaudeAssistant35Function
       Runtime: python3.10
-      Handler: lambda_function.lambda_handler
+      Handler: index.lambda_handler
       Role: !GetAtt ClaudeLambdaRole.Arn
       Timeout: 30
       Code:
@@ -43,36 +43,40 @@ Resources:
           import json
           import boto3
 
-          bedrock = boto3.client("bedrock-runtime", region_name="us-east-1")
+          client = boto3.client("bedrock-runtime", region_name="us-east-1")
 
           def lambda_handler(event, context):
               try:
                   body = json.loads(event.get("body", "{}"))
-                  prompt = body.get("prompt", "")
+                  prompt = body.get("prompt", "Explain XSS")
 
                   payload = {
-                      "prompt": f"\n\nHuman: {prompt}\n\nAssistant:",
-                      "max_tokens_to_sample": 300,
-                      "temperature": 0.7,
-                      "stop_sequences": ["\n\nHuman:"]
+                      "messages": [
+                          {
+                              "role": "user",
+                              "content": prompt
+                          }
+                      ],
+                      "anthropic_version": "bedrock-2023-05-31",
+                      "max_tokens": 400,
+                      "temperature": 0.7
                   }
 
-                  response = bedrock.invoke_model(
-                      modelId="anthropic.claude-v2",
+                  response = client.invoke_model(
+                      modelId= "anthropic.claude-3-5-sonnet-20240620-v1:0",
                       contentType="application/json",
                       accept="application/json",
                       body=json.dumps(payload)
                   )
 
                   result = json.loads(response["body"].read())
-
                   return {
                       "statusCode": 200,
                       "headers": {
                           "Content-Type": "application/json",
                           "Access-Control-Allow-Origin": "*"
                       },
-                      "body": json.dumps({"response": result["completion"]})
+                      "body": json.dumps({"response": result["content"][0]["text"]})
                   }
               except Exception as e:
                   return {
@@ -114,5 +118,5 @@ Resources:
 
 Outputs:
   ClaudeInvokeURL:
-    Description: "Public API URL for Claude assistant"
-    Value: !Sub "https://${ClaudeAPI}.execute-api.${AWS::Region}.amazonaws.com/prod/ask"
+    Description: Public Claude 3.5 Messages API POST URL
+    Value: !Sub https://${ClaudeAPI}.execute-api.${AWS::Region}.amazonaws.com/prod/ask
