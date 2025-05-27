@@ -1,9 +1,30 @@
-
 import streamlit as st
 import requests
 
 st.set_page_config(page_title="OWASP AI Assistant", layout="wide")
 st.title("OWASP Top 10 Assistant")
+
+# Section banner helper
+def banner(title: str, color: str = "#1f77b4"):
+    st.markdown(f"""
+    <div style='padding: 0.75em; margin: 1em 0; background-color: {color}; color: white;
+                border-radius: 0.5em; font-weight: bold; font-size: 1.2em;'>
+        {title}
+    </div>
+    """, unsafe_allow_html=True)
+
+# Sidebar menu with icons
+page = st.sidebar.radio(
+    "Navigation",
+    [
+        "🔐 OWASP Top 10",
+        "🛠️ WebGoat",
+        "🎓 Mimosa (for tutor only)",
+        "☁️ Cloud Security",
+        "🤖 LLM Application Security",
+        "🧠 Adaptive Quiz"
+    ]
+)
 
 # Sidebar model selector
 model_choice = st.sidebar.selectbox(
@@ -19,34 +40,63 @@ model_id_map = {
 
 selected_model_id = model_id_map[model_choice]
 
-# Input prompt
-prompt = st.text_area("Ask a question about OWASP vulnerabilities")
-
-if st.button("Submit"):
-    if not prompt:
-        st.warning("Please enter a prompt.")
-    else:
-        with st.spinner("Contacting model..."):
+if page == "🧠 Adaptive Quiz":
+    banner("🧠 Adaptive Quiz Generator", "#444444")
+    difficulty = st.selectbox("Choose difficulty", ["Beginner", "Intermediate", "Advanced"])
+    topic = st.text_input("Quiz Topic (e.g., XSS, IAM, Prompt Injection)")
+    if st.button("Generate Quiz Question"):
+        quiz_prompt = f"Generate a {difficulty.lower()} level multiple choice question on {topic}. Include 4 options and indicate the correct answer."
+        with st.spinner("Generating quiz..."):
             try:
                 response = requests.post(
                     "https://5olh8uhg6b.execute-api.ap-northeast-1.amazonaws.com/prod/ask",
-                    json={"prompt": prompt, "modelId": selected_model_id},
+                    json={"prompt": quiz_prompt, "modelId": selected_model_id},
                     headers={"Content-Type": "application/json"}
                 )
-                try:
-                    result = response.json()
-                    output = result.get("response") or result.get("error") or result or "[No output returned]"
-                    if response.status_code == 200:
-                        st.success("Model Response:")
-                        st.markdown(output, unsafe_allow_html=True)
-                    else:
-                        st.error(f"API Error {response.status_code}")
-                        st.code(output)
-                except Exception as parse_error:
-                    st.error("⚠️ Failed to parse response from API.")
-                    st.code(response.text)
+                result = response.json()
+                output = result.get("response") or result.get("error") or result or "[No output returned]"
+                if response.status_code == 200:
+                    st.markdown(output, unsafe_allow_html=True)
+                else:
+                    st.error(f"API Error {response.status_code}")
+                    st.code(output)
             except Exception as e:
-                st.error(f"Error contacting API: {e}")
+                st.error(f"Error: {e}")
+else:
+    section_colors = {
+        "🔐 OWASP Top 10": "#d7263d",
+        "🛠️ WebGoat": "#ff6f00",
+        "🎓 Mimosa (for tutor only)": "#5d2e8c",
+        "☁️ Cloud Security": "#208b3a",
+        "🤖 LLM Application Security": "#3e4e88"
+    }
+    banner(page, section_colors.get(page, "#1f77b4"))
+    prompt = st.text_area("Ask a question about OWASP vulnerabilities")
+    if st.button("Submit"):
+        if not prompt:
+            st.warning("Please enter a prompt.")
+        else:
+            with st.spinner("Contacting model..."):
+                try:
+                    response = requests.post(
+                        "https://5olh8uhg6b.execute-api.ap-northeast-1.amazonaws.com/prod/ask",
+                        json={"prompt": prompt, "modelId": selected_model_id},
+                        headers={"Content-Type": "application/json"}
+                    )
+                    try:
+                        result = response.json()
+                        output = result.get("response") or result.get("error") or result or "[No output returned]"
+                        if response.status_code == 200:
+                            st.success("Model Response:")
+                            st.markdown(output, unsafe_allow_html=True)
+                        else:
+                            st.error(f"API Error {response.status_code}")
+                            st.code(output)
+                    except Exception as parse_error:
+                        st.error("⚠️ Failed to parse response from API.")
+                        st.code(response.text)
+                except Exception as e:
+                    st.error(f"Error contacting API: {e}")
 
 st.markdown("---")
 st.markdown("Built with Amazon Bedrock, Streamlit, and OWASP guidance.")
