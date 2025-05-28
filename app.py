@@ -1,10 +1,8 @@
-# Updated app.py with fixed login flow and UI rendering
-
 import streamlit as st
 import requests
 import urllib.parse
 import json
-import streamlit.components.v1 as components
+import jwt
 from admin_panel import admin_settings_panel
 
 # === App Layout ===
@@ -35,7 +33,7 @@ def exchange_code_for_token(code):
     response = requests.post(token_url, data=data, headers=headers)
     return response.json()
 
-# === Main Auth Logic ===
+# === Authentication Handling ===
 query_params = st.query_params
 if "code" in query_params:
     token_info = exchange_code_for_token(query_params["code"][0])
@@ -43,16 +41,20 @@ if "code" in query_params:
         st.session_state["id_token"] = token_info["id_token"]
         st.session_state["access_token"] = token_info.get("access_token")
         st.session_state["logged_in"] = True
-        st.experimental_set_query_params()
+        st.query_params.clear()
+        st.rerun()
     else:
         st.error("Login failed. Please try again.")
 
-# === Login/Logout Buttons ===
+# === Login / Logout UI ===
 if st.session_state.get("logged_in"):
-    st.success("Logged in with Cognito!")
-    import jwt
+    st.success("✅ Logged in with Cognito")
+
     try:
-        decoded_token = jwt.decode(st.session_state["id_token"], options={"verify_signature": False})
+        decoded_token = jwt.decode(
+            st.session_state["id_token"],
+            options={"verify_signature": False}
+        )
         email = decoded_token.get("email", "N/A")
         sub = decoded_token.get("sub", "N/A")
         st.sidebar.markdown("### 👤 Profile Info")
@@ -62,30 +64,33 @@ if st.session_state.get("logged_in"):
         st.sidebar.error("Failed to decode ID token.")
         st.sidebar.write(str(e))
 
-    if st.button("Logout"):
+    if st.sidebar.button("Logout"):
         st.session_state.clear()
-        st.experimental_rerun()
+        st.rerun()
+
 else:
     login_url = get_login_url()
-    signup_url = f"{COGNITO_DOMAIN}/signup?client_id={CLIENT_ID}&response_type=code&scope=openid+profile+email&redirect_uri={urllib.parse.quote(REDIRECT_URI)}"
+    signup_url = (
+        f"{COGNITO_DOMAIN}/signup?response_type=code"
+        f"&client_id={CLIENT_ID}&redirect_uri={urllib.parse.quote(REDIRECT_URI)}"
+        f"&scope=openid+profile+email"
+    )
 
-    st.markdown(f"""
-    <a href="{login_url}" target="_self"><button>Login with Cognito</button></a>
-    <a href="{signup_url}" target="_self"><button>Sign Up</button></a>
-    """, unsafe_allow_html=True)
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Login with Cognito"):
+            st.markdown(
+                f"<meta http-equiv='refresh' content='0; URL={login_url}' />",
+                unsafe_allow_html=True
+            )
+    with col2:
+        if st.button("Sign Up"):
+            st.markdown(
+                f"<meta http-equiv='refresh' content='0; URL={signup_url}' />",
+                unsafe_allow_html=True
+            )
 
-
-
-def speak_text(text):
-    js = f"""
-    <script>
-        var utterance = new SpeechSynthesisUtterance({json.dumps(text)});
-        utterance.lang = 'en-US';
-        window.speechSynthesis.speak(utterance);
-    </script>
-    """
-    components.html(js)
-
+# === UI Utilities ===
 def banner(title: str, color: str = "#1f77b4"):
     st.markdown(f"""
     <div style='padding: 0.75em; margin: 1em 0; background-color: {color}; color: white;
@@ -94,7 +99,7 @@ def banner(title: str, color: str = "#1f77b4"):
     </div>
     """, unsafe_allow_html=True)
 
-# Sidebar
+# === Navigation Sidebar ===
 page = st.sidebar.radio(
     "Navigation",
     [
@@ -121,7 +126,7 @@ model_id_map = {
 
 selected_model_id = model_id_map[model_choice]
 
-# Page logic
+# === Page Logic ===
 if page == "🧠 Adaptive Quiz":
     banner("🧠 Adaptive Quiz Generator", "#444444")
     difficulty = st.selectbox("Choose difficulty", ["Beginner", "Intermediate", "Advanced"])
@@ -139,8 +144,6 @@ if page == "🧠 Adaptive Quiz":
                 output = result.get("response") or result.get("error") or result or "[No output returned]"
                 if response.status_code == 200:
                     st.markdown(output, unsafe_allow_html=True)
-                    if st.button("🔊 Read aloud", key="read_response"):
-                        speak_text(output)
                 else:
                     st.error(f"API Error {response.status_code}")
                     st.code(output)
@@ -178,8 +181,6 @@ else:
                         if response.status_code == 200:
                             st.success("Model Response:")
                             st.markdown(output, unsafe_allow_html=True)
-                            if st.button("🔊 Read aloud", key="read_response"):
-                                speak_text(output)
                         else:
                             st.error(f"API Error {response.status_code}")
                             st.code(output)
