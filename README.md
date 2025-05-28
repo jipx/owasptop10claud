@@ -137,7 +137,108 @@ BEDROCK_REGION = "us-east-1"
 
 ---
 
-## ✅ License
+# 🛡️ OWASP AI Assistant with Cognito Login
+
+This project is a secure, multi-page **Streamlit web app** that allows users to:
+- Log in via **AWS Cognito Hosted UI** using OAuth2.
+- Access **OWASP Top 10** resources, adaptive quizzes, and tools like WebGoat.
+- Communicate with an AI assistant via **Amazon Bedrock**.
+- Support speech synthesis for accessibility.
+- Provide an admin panel for custom model settings.
+
+---
+
+## 🚀 Features
+
+- 🔐 **Secure Login** with AWS Cognito (OAuth2 Authorization Code Flow)
+- 🧠 **Adaptive Quiz Generator** for security learning
+- 📢 **Text-to-Speech Output** using browser's Web Speech API
+- ⚙️ **Administrator Panel** (for tutors/admins)
+- 🤖 **Bedrock Model Integration** (Claude, DeepSeek, etc.)
+- 🎨 Stylish banners and interactive layout
+
+---
+
+## 🛠️ Setup Instructions
+
+### 1. Clone the Repo
+
+```bash
+git clone https://github.com/your-org/owasp-ai-assistant.git
+cd owasp-ai-assistant
+```
+
+### 2. Set Up `secrets.toml`
+
+Create a `.streamlit/secrets.toml` file:
+
+```toml
+COGNITO_DOMAIN = "https://your-app.auth.ap-southeast-1.amazoncognito.com"
+CLIENT_ID = "xxxxxxxxxxxx"
+REDIRECT_URI = "http://localhost:8501"
+```
+
+### 3. Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Run the App
+
+```bash
+streamlit run app.py
+```
+
+---
+
+## 🧪 Authentication Flow
+
+1. User clicks **"Login with Cognito"**.
+2. Redirects to Cognito Hosted UI.
+3. On success, Cognito redirects back with `?code=...`.
+4. App exchanges code for tokens and stores in `st.session_state`.
+5. User sees protected content.
+
+---
+
+## 📚 Directory Structure
+
+```
+.
+├── app.py
+├── admin_panel.py
+├── requirements.txt
+├── README.md
+└── .streamlit/
+    └── secrets.toml
+```
+
+---
+
+## 🧠 Model Options
+
+| Label               | Model ID |
+|--------------------|----------|
+| Claude 3.5 Sonnet  | `anthropic.claude-3-sonnet-20240620-v1:0` |
+| Claude v2          | `anthropic.claude-v2`                     |
+| DeepSeek-V2 Chat   | `deepseek.chat`                           |
+
+---
+
+## 🛡️ Built With
+
+- [Streamlit](https://streamlit.io)
+- [Amazon Cognito](https://aws.amazon.com/cognito/)
+- [Amazon Bedrock](https://aws.amazon.com/bedrock/)
+- [OWASP Resources](https://owasp.org)
+
+---
+
+## 📜 License
+
+This project is licensed for educational purposes.
+
 
 MIT License
 
