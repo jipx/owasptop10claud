@@ -12,6 +12,10 @@ st.set_page_config(page_title="OWASP AI Assistant", layout="wide")
 COGNITO_DOMAIN = st.secrets["COGNITO_DOMAIN"]
 CLIENT_ID = st.secrets["CLIENT_ID"]
 REDIRECT_URI = st.secrets["REDIRECT_URI"]
+LOGOUT_URL = (
+    f"{COGNITO_DOMAIN}/logout"
+    f"?client_id={CLIENT_ID}&logout_uri={urllib.parse.quote(REDIRECT_URI)}"
+)
 
 # === Auth Utilities ===
 def get_login_url():
@@ -33,8 +37,14 @@ def exchange_code_for_token(code):
     response = requests.post(token_url, data=data, headers=headers)
     return response.json()
 
-# === Authentication Handling ===
+# === Handle Logout via Query Params ===
 query_params = st.query_params
+if "logout" in query_params:
+    st.session_state.clear()
+    st.markdown(f"<meta http-equiv='refresh' content='0; URL={LOGOUT_URL}' />", unsafe_allow_html=True)
+    st.stop()
+
+# === Handle Login Callback ===
 if "code" in query_params:
     token_info = exchange_code_for_token(query_params["code"][0])
     if "id_token" in token_info:
@@ -46,10 +56,9 @@ if "code" in query_params:
     else:
         st.error("Login failed. Please try again.")
 
-# === Login / Logout UI ===
+# === UI: Login / Logout ===
 if st.session_state.get("logged_in"):
     st.success("✅ Logged in with Cognito")
-
     try:
         decoded_token = jwt.decode(
             st.session_state["id_token"],
@@ -64,9 +73,11 @@ if st.session_state.get("logged_in"):
         st.sidebar.error("Failed to decode ID token.")
         st.sidebar.write(str(e))
 
+    # Button-triggered logout
     if st.sidebar.button("Logout"):
         st.session_state.clear()
-        st.rerun()
+        st.markdown(f"<meta http-equiv='refresh' content='0; URL={LOGOUT_URL}' />", unsafe_allow_html=True)
+        st.stop()
 
 else:
     login_url = get_login_url()
@@ -79,16 +90,10 @@ else:
     col1, col2 = st.columns(2)
     with col1:
         if st.button("Login with Cognito"):
-            st.markdown(
-                f"<meta http-equiv='refresh' content='0; URL={login_url}' />",
-                unsafe_allow_html=True
-            )
+            st.markdown(f"<meta http-equiv='refresh' content='0; URL={login_url}' />", unsafe_allow_html=True)
     with col2:
         if st.button("Sign Up"):
-            st.markdown(
-                f"<meta http-equiv='refresh' content='0; URL={signup_url}' />",
-                unsafe_allow_html=True
-            )
+            st.markdown(f"<meta http-equiv='refresh' content='0; URL={signup_url}' />", unsafe_allow_html=True)
 
 # === UI Utilities ===
 def banner(title: str, color: str = "#1f77b4"):
