@@ -1,0 +1,108 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Cognito User Pool for Streamlit OAuth Integration'
+
+Parameters:
+  UserPoolName:
+    Type: String
+    Default: 'StreamlitDeepseekUserPool'
+    Description: 'Name for the Cognito User Pool'
+  AppClientName:
+    Type: String
+    Default: 'StreamlitAppClient'
+    Description: 'Name for the Cognito App Client'
+  DomainName:
+    Type: String
+    Default: 'owasp-streamlit-auth'
+    Description: 'Domain prefix for Cognito Hosted UI'
+  CallbackURL:
+    Type: String
+    Default: 'https://owasptop10claud-glwrf2bxszlfatfcbsfux8.streamlit.app/'
+    Description: 'OAuth callback URL for your Streamlit app'
+  LogoutURL:
+    Type: String
+    Default: 'https://owasptop10claud-glwrf2bxszlfatfcbsfux8.streamlit.app/'
+    Description: 'OAuth logout URL for your Streamlit app'
+
+Resources:
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Ref UserPoolName
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: false
+      AutoVerifiedAttributes:
+        - email
+      Schema:
+        - AttributeDataType: String
+          Name: email
+          Required: true
+          Mutable: true
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          RequireUppercase: true
+      EmailConfiguration:
+        EmailSendingAccount: COGNITO_DEFAULT
+      UsernameConfiguration:
+        CaseSensitive: false
+
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Ref AppClientName
+      UserPoolId: !Ref CognitoUserPool
+      GenerateSecret: false
+      AllowedOAuthFlows:
+        - code
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthScopes:
+        - openid
+        - profile
+        - email
+      CallbackURLs:
+        - !Ref CallbackURL
+      LogoutURLs:
+        - !Ref LogoutURL
+      SupportedIdentityProviders:
+        - COGNITO
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+
+  CognitoUserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Ref DomainName
+      UserPoolId: !Ref CognitoUserPool
+
+  CognitoIdentityPool:
+    Type: AWS::Cognito::IdentityPool
+    DependsOn:
+      - CognitoUserPool
+      - CognitoUserPoolClient
+    Properties:
+      IdentityPoolName: !Sub '${UserPoolName}IdentityPool'
+      AllowUnauthenticatedIdentities: false
+      CognitoIdentityProviders:
+        - ClientId: !Ref CognitoUserPoolClient
+          ProviderName: !Sub "cognito-idp.${AWS::Region}.amazonaws.com/${CognitoUserPool}"
+
+Outputs:
+  UserPoolId:
+    Description: 'Cognito User Pool ID'
+    Value: !Ref CognitoUserPool
+  AppClientId:
+    Description: 'Cognito App Client ID'
+    Value: !Ref CognitoUserPoolClient
+  DomainURL:
+    Description: 'Cognito Hosted UI Domain'
+    Value: !Sub 'https://${DomainName}.auth.${AWS::Region}.amazoncognito.com'
+  AuthorizationEndpoint:
+    Description: 'OAuth 2.0 Authorization Endpoint'
+    Value: !Sub 'https://${DomainName}.auth.${AWS::Region}.amazoncognito.com/oauth2/authorize'
+  TokenEndpoint:
+    Description: 'OAuth 2.0 Token Endpoint'
+    Value: !Sub 'https://${DomainName}.auth.${AWS::Region}.amazoncognito.com/oauth2/token'
