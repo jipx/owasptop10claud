@@ -1,0 +1,71 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Cognito setup for Streamlit OWASP app (localhost)
+
+Parameters:
+  HostedUIDomainPrefix:
+    Type: String
+    Default: owasp-localhost
+    Description: Must be globally unique (e.g., owasp-localhost-2025)
+
+Resources:
+
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: OWASPLocalUserPool
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: StreamlitClient
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows:
+        - code
+      AllowedOAuthScopes:
+        - email
+        - openid
+        - profile
+      CallbackURLs:
+        - http://localhost:8501
+      LogoutURLs:
+        - http://localhost:8501
+      SupportedIdentityProviders:
+        - COGNITO
+
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Ref HostedUIDomainPrefix
+      UserPoolId: !Ref UserPool
+
+Outputs:
+
+  UserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref UserPool
+
+  UserPoolClientId:
+    Description: App Client ID
+    Value: !Ref UserPoolClient
+
+  HostedUIDomain:
+    Description: Hosted UI Login URL (append `/login?...`)
+    Value: !Sub "https://${HostedUIDomainPrefix}.auth.${AWS::Region}.amazoncognito.com"
+
