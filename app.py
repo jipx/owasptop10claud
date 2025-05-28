@@ -4,25 +4,34 @@ import urllib.parse
 import json
 import jwt
 from admin_panel import admin_settings_panel
+import time
 
 # === App Layout ===
-st.set_page_config(page_title="OWASP AI Assistant", layout="wide")
+st.set_page_config(
+    page_title="OWASP AI Assistant",
+    layout="wide",
+    page_icon="🛡️"
+)
 
 # === Cognito Config ===
 COGNITO_DOMAIN = st.secrets["COGNITO_DOMAIN"]
 CLIENT_ID = st.secrets["CLIENT_ID"]
 REDIRECT_URI = st.secrets["REDIRECT_URI"]
 LOGOUT_URL = (
-    f"{COGNITO_DOMAIN}/logout"
-    f"?client_id={CLIENT_ID}&logout_uri={urllib.parse.quote(REDIRECT_URI)}"
+    f"{COGNITO_DOMAIN}/logout?"
+    f"client_id={CLIENT_ID}&"
+    f"logout_uri={urllib.parse.quote(REDIRECT_URI)}"
 )
 
 # === Auth Utilities ===
 def get_login_url():
     return (
-        f"{COGNITO_DOMAIN}/oauth2/authorize?response_type=code"
-        f"&client_id={CLIENT_ID}&redirect_uri={urllib.parse.quote(REDIRECT_URI)}"
-        f"&scope=openid+profile+email"
+        f"{COGNITO_DOMAIN}/oauth2/authorize?"
+        f"response_type=code&"
+        f"client_id={CLIENT_ID}&"
+        f"redirect_uri={urllib.parse.quote(REDIRECT_URI)}&"
+        f"scope=openid+profile+email&"
+        f"state={urllib.parse.quote(REDIRECT_URI)}"
     )
 
 def exchange_code_for_token(code):
@@ -34,68 +43,109 @@ def exchange_code_for_token(code):
         "redirect_uri": REDIRECT_URI,
     }
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
-    response = requests.post(token_url, data=data, headers=headers)
-    return response.json()
-
-# === Handle Logout via Query Params ===
-query_params = st.query_params
-if "logout" in query_params:
-    st.session_state.clear()
-    st.markdown(f"<meta http-equiv='refresh' content='0; URL={LOGOUT_URL}' />", unsafe_allow_html=True)
-    st.stop()
-
-# === Handle Login Callback ===
-if "code" in query_params:
-    token_info = exchange_code_for_token(query_params["code"][0])
-    if "id_token" in token_info:
-        st.session_state["id_token"] = token_info["id_token"]
-        st.session_state["access_token"] = token_info.get("access_token")
-        st.session_state["logged_in"] = True
-        st.query_params.clear()
-        st.rerun()
-    else:
-        st.error("Login failed. Please try again.")
-
-# === UI: Login / Logout ===
-if st.session_state.get("logged_in"):
-    st.success("✅ Logged in with Cognito")
     try:
-        decoded_token = jwt.decode(
-            st.session_state["id_token"],
+        response = requests.post(token_url, data=data, headers=headers)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        st.error(f"Token exchange failed: {str(e)}")
+        return None
+
+def validate_token(token):
+    try:
+        decoded = jwt.decode(
+            token,
             options={"verify_signature": False}
         )
-        email = decoded_token.get("email", "N/A")
-        sub = decoded_token.get("sub", "N/A")
-        st.sidebar.markdown("### 👤 Profile Info")
-        st.sidebar.write(f"**Email:** {email}")
-        st.sidebar.write(f"**User ID:** {sub}")
-    except Exception as e:
-        st.sidebar.error("Failed to decode ID token.")
-        st.sidebar.write(str(e))
+        # Check if token is expired
+        if decoded.get("exp", 0) < time.time():
+            return None
+        return decoded
+    except jwt.PyJWTError as e:
+        st.error(f"Token validation error: {str(e)}")
+        return None
 
-    # Button-triggered logout
-    if st.sidebar.button("Logout"):
+# === Session State Management ===
+def initialize_session():
+    if "logged_in" not in st.session_state:
+        st.session_state.logged_in = False
+    if "user_info" not in st.session_state:
+        st.session_state.user_info = {}
+
+# === Handle Authentication Flow ===
+def handle_auth_flow():
+    query_params = st.query_params
+    
+    # Handle logout
+    if "logout" in query_params:
         st.session_state.clear()
-        st.markdown(f"<meta http-equiv='refresh' content='0; URL={LOGOUT_URL}' />", unsafe_allow_html=True)
+        st.markdown(
+            f"<meta http-equiv='refresh' content='0; URL={LOGOUT_URL}' />", 
+            unsafe_allow_html=True
+        )
         st.stop()
+    
+    # Handle login callback
+    if "code" in query_params:
+        with st.spinner("Authenticating..."):
+            token_info = exchange_code_for_token(query_params["code"][0])
+            if token_info and "id_token" in token_info:
+                st.session_state["tokens"] = token_info
+                st.session_state["logged_in"] = True
+                st.query_params.clear()
+                st.rerun()
+            else:
+                st.error("Login failed. Please try again.")
+                time.sleep(2)
+                st.rerun()
 
-else:
+# === UI Components ===
+def show_auth_buttons():
     login_url = get_login_url()
     signup_url = (
-        f"{COGNITO_DOMAIN}/signup?response_type=code"
-        f"&client_id={CLIENT_ID}&redirect_uri={urllib.parse.quote(REDIRECT_URI)}"
-        f"&scope=openid+profile+email"
+        f"{COGNITO_DOMAIN}/signup?"
+        f"response_type=code&"
+        f"client_id={CLIENT_ID}&"
+        f"redirect_uri={urllib.parse.quote(REDIRECT_URI)}&"
+        f"scope=openid+profile+email"
     )
+
+    st.markdown("""
+    <div style='text-align: center; margin: 2rem 0;'>
+        <h2>OWASP AI Assistant</h2>
+        <p>Please authenticate to access security resources</p>
+    </div>
+    """, unsafe_allow_html=True)
 
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("Login with Cognito"):
-            st.markdown(f"<meta http-equiv='refresh' content='0; URL={login_url}' />", unsafe_allow_html=True)
+        st.link_button("Login with Cognito", login_url)
     with col2:
-        if st.button("Sign Up"):
-            st.markdown(f"<meta http-equiv='refresh' content='0; URL={signup_url}' />", unsafe_allow_html=True)
+        st.link_button("Sign Up", signup_url)
 
-# === UI Utilities ===
+def show_user_profile():
+    if "tokens" in st.session_state:
+        user_info = validate_token(st.session_state["tokens"]["id_token"])
+        if user_info:
+            st.session_state.user_info = {
+                "email": user_info.get("email", "N/A"),
+                "user_id": user_info.get("sub", "N/A"),
+                "name": user_info.get("name", "N/A")
+            }
+    
+    st.sidebar.success("✅ Authenticated")
+    st.sidebar.markdown("### 👤 User Profile")
+    st.sidebar.write(f"**Name:** {st.session_state.user_info.get('name')}")
+    st.sidebar.write(f"**Email:** {st.session_state.user_info.get('email')}")
+    
+    if st.sidebar.button("Logout"):
+        st.session_state.clear()
+        st.markdown(
+            f"<meta http-equiv='refresh' content='0; URL={LOGOUT_URL}' />", 
+            unsafe_allow_html=True
+        )
+        st.stop()
+
 def banner(title: str, color: str = "#1f77b4"):
     st.markdown(f"""
     <div style='padding: 0.75em; margin: 1em 0; background-color: {color}; color: white;
@@ -104,19 +154,28 @@ def banner(title: str, color: str = "#1f77b4"):
     </div>
     """, unsafe_allow_html=True)
 
+# === Main App Logic ===
+initialize_session()
+handle_auth_flow()
+
+if not st.session_state.get("logged_in"):
+    show_auth_buttons()
+    st.stop()
+
+show_user_profile()
+
 # === Navigation Sidebar ===
-page = st.sidebar.radio(
-    "Navigation",
-    [
-        "🔐 OWASP Top 10",
-        "🛠️ WebGoat",
-        "🎓 Mimosa (for tutor only)",
-        "☁️ Cloud Security",
-        "🤖 LLM Application Security",
-        "🧠 Adaptive Quiz",
-        "⚙️ Administrator Settings"
-    ]
-)
+PAGE_OPTIONS = [
+    "🔐 OWASP Top 10",
+    "🛠️ WebGoat",
+    "🎓 Mimosa (for tutor only)",
+    "☁️ Cloud Security",
+    "🤖 LLM Application Security",
+    "🧠 Adaptive Quiz",
+    "⚙️ Administrator Settings"
+]
+
+page = st.sidebar.radio("Navigation", PAGE_OPTIONS)
 
 model_choice = st.sidebar.selectbox(
     "Choose a model",
@@ -131,35 +190,45 @@ model_id_map = {
 
 selected_model_id = model_id_map[model_choice]
 
-# === Page Logic ===
-if page == "🧠 Adaptive Quiz":
+# === Page Handlers ===
+def call_bedrock_api(prompt, model_id):
+    try:
+        response = requests.post(
+            "https://5olh8uhg6b.execute-api.ap-northeast-1.amazonaws.com/prod/ask",
+            json={"prompt": prompt, "modelId": model_id},
+            headers={"Content-Type": "application/json"},
+            timeout=30
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        st.error(f"API request failed: {str(e)}")
+        return None
+
+def handle_quiz_page():
     banner("🧠 Adaptive Quiz Generator", "#444444")
     difficulty = st.selectbox("Choose difficulty", ["Beginner", "Intermediate", "Advanced"])
     topic = st.text_input("Quiz Topic (e.g., XSS, IAM, Prompt Injection)")
+    
     if st.button("Generate Quiz Question"):
-        quiz_prompt = f"Generate a {difficulty.lower()} level multiple choice question on {topic}. Include 4 options and indicate the correct answer."
+        quiz_prompt = (
+            f"Generate a {difficulty.lower()} level multiple choice question on {topic}. "
+            f"Include 4 options and indicate the correct answer."
+        )
         with st.spinner("Generating quiz..."):
-            try:
-                response = requests.post(
-                    "https://5olh8uhg6b.execute-api.ap-northeast-1.amazonaws.com/prod/ask",
-                    json={"prompt": quiz_prompt, "modelId": selected_model_id},
-                    headers={"Content-Type": "application/json"}
-                )
-                result = response.json()
-                output = result.get("response") or result.get("error") or result or "[No output returned]"
-                if response.status_code == 200:
-                    st.markdown(output, unsafe_allow_html=True)
-                else:
-                    st.error(f"API Error {response.status_code}")
-                    st.code(output)
-            except Exception as e:
-                st.error(f"Error: {e}")
+            result = call_bedrock_api(quiz_prompt, selected_model_id)
+            if result:
+                output = result.get("response") or "[No output returned]"
+                st.markdown(output, unsafe_allow_html=True)
 
-elif page == "⚙️ Administrator Settings":
+def handle_admin_page():
     banner("⚙️ Administrator Control Panel", "#333333")
-    admin_settings_panel(model_id_map)
+    if st.session_state.user_info.get("email") in st.secrets.get("ADMIN_EMAILS", []):
+        admin_settings_panel(model_id_map)
+    else:
+        st.warning("⚠️ You don't have administrator privileges.")
 
-else:
+def handle_default_page(page_name):
     section_colors = {
         "🔐 OWASP Top 10": "#d7263d",
         "🛠️ WebGoat": "#ff6f00",
@@ -167,33 +236,33 @@ else:
         "☁️ Cloud Security": "#208b3a",
         "🤖 LLM Application Security": "#3e4e88"
     }
-    banner(page, section_colors.get(page, "#1f77b4"))
+    banner(page_name, section_colors.get(page_name, "#1f77b4"))
+    
     prompt = st.text_area("Ask a question about OWASP vulnerabilities")
     if st.button("Submit"):
         if not prompt:
             st.warning("Please enter a prompt.")
         else:
-            with st.spinner("Contacting model..."):
-                try:
-                    response = requests.post(
-                        "https://5olh8uhg6b.execute-api.ap-northeast-1.amazonaws.com/prod/ask",
-                        json={"prompt": prompt, "modelId": selected_model_id},
-                        headers={"Content-Type": "application/json"}
-                    )
-                    try:
-                        result = response.json()
-                        output = result.get("response") or result.get("error") or result or "[No output returned]"
-                        if response.status_code == 200:
-                            st.success("Model Response:")
-                            st.markdown(output, unsafe_allow_html=True)
-                        else:
-                            st.error(f"API Error {response.status_code}")
-                            st.code(output)
-                    except Exception as parse_error:
-                        st.error("⚠️ Failed to parse response from API.")
-                        st.code(response.text)
-                except Exception as e:
-                    st.error(f"Error contacting API: {e}")
+            with st.spinner("Generating response..."):
+                result = call_bedrock_api(prompt, selected_model_id)
+                if result:
+                    output = result.get("response") or "[No output returned]"
+                    st.success("Model Response:")
+                    st.markdown(output, unsafe_allow_html=True)
 
+# === Page Routing ===
+if page == "🧠 Adaptive Quiz":
+    handle_quiz_page()
+elif page == "⚙️ Administrator Settings":
+    handle_admin_page()
+else:
+    handle_default_page(page)
+
+# Footer
 st.markdown("---")
-st.markdown("Built with Amazon Bedrock, Streamlit, and OWASP guidance.")
+st.markdown(
+    "<div style='text-align: center;'>"
+    "Built with Amazon Bedrock, Streamlit, and OWASP guidance."
+    "</div>",
+    unsafe_allow_html=True
+)
