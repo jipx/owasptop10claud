@@ -1,70 +1,80 @@
-<!DOCTYPE html>
 
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>OWASP Assistant Architecture - Enhanced Documentation</title>
 <style>
-        :root {
-            --primary-color: #2c3e50;
-            --secondary-color: #3498db;
-            --background-light: #f8f9fa;
-        }
-        body {
-            font-family: 'Segoe UI', Arial, sans-serif;
-            line-height: 1.6;
-            margin: 2rem;
-            max-width: 1400px;
-            margin: auto;
-            padding: 2rem;
-        }
-        .version-toggle {
-            background-color: var(--background-light);
-            padding: 1rem;
-            margin: 1rem 0;
-            border-radius: 8px;
-            cursor: pointer;
-        }
-        .collapsible {
-            display: none;
-            padding: 1rem;
-            background: white;
-            border: 1px solid #ddd;
-        }
-        pre {
-            background: #333;
-            color: white;
-            padding: 1.5rem;
-            border-radius: 8px;
-            position: relative;
-        }
-        .copy-btn {
-            position: absolute;
-            right: 10px;
-            top: 10px;
-            background: var(--secondary-color);
-            color: white;
-            border: none;
-            padding: 5px 10px;
-            border-radius: 3px;
-            cursor: pointer;
-        }
-        .comparison-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 2rem 0;
-        }
-        .comparison-table td, .comparison-table th {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
-        }
-    </style>
+    :root {
+        --primary-color: #2c3e50;
+        --secondary-color: #3498db;
+        --background-light: #f8f9fa;
+    }
+    body {
+        font-family: 'Segoe UI', Arial, sans-serif;
+        line-height: 1.6;
+        max-width: 1400px;
+        margin: auto;
+        padding: 2rem;
+    }
+    .version-toggle {
+        background-color: var(--background-light);
+        padding: 1rem;
+        margin: 1rem 0;
+        border-radius: 8px;
+        cursor: pointer;
+    }
+    .collapsible {
+        display: none;
+        padding: 1rem;
+        background: white;
+        border: 1px solid #ddd;
+        transition: max-height 0.3s ease-out;
+        overflow: hidden;
+    }
+    pre {
+        background: #333;
+        color: white;
+        padding: 1.5rem;
+        border-radius: 8px;
+        position: relative;
+    }
+    pre code {
+        white-space: pre-wrap;
+    }
+    .copy-btn {
+        position: absolute;
+        right: 10px;
+        top: 10px;
+        background: var(--secondary-color);
+        color: white;
+        border: none;
+        padding: 5px 10px;
+        border-radius: 3px;
+        cursor: pointer;
+    }
+    .comparison-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 2rem 0;
+    }
+    .comparison-table td, .comparison-table th {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+    }
+    .print-mode .version-toggle,
+    .print-mode .copy-btn {
+        display: none;
+    }
+    .print-mode .collapsible {
+        display: block !important;
+    }
+</style>
 </head>
 <body>
 <h1>🔒 OWASP Assistant Architecture - Enhanced Documentation</h1>
-<!-- Version Comparison Table -->
 <table class="comparison-table">
 <tr>
 <th>Feature</th>
@@ -87,20 +97,17 @@
 <td>X-Ray + Custom Dashboard</td>
 </tr>
 </table>
-<!-- Version 1 Section -->
 <div class="version-toggle" onclick="toggleSection('v1')">
 <h2>🔹 Version 1 - Core Implementation</h2>
 </div>
-<div class="collapsible" id="v1">
-<!-- Original Version 1 Content Here -->
-
+<div class="collapsible" id="v1" style="display:block;">
 <p>Version 1 implements a simple three-tier architecture with:</p>
 <ul>
 <li><strong>Frontend:</strong> Streamlit web app</li>
 <li><strong>API Gateway:</strong> Simple REST endpoint <code>/prod/ask</code></li>
 <li><strong>Lambda Function:</strong> Connects to Amazon Bedrock using hardcoded model ID</li>
 </ul>
-<pre>
+<pre><code>
 def lambda_handler(event, context):
     prompt = json.loads(event['body'])['prompt']
     response = bedrock.invoke_model(prompt=prompt, modelId="anthropic.claude-v2")
@@ -108,73 +115,68 @@ def lambda_handler(event, context):
         "statusCode": 200,
         "body": json.dumps({"output": response})
     }
-</pre>
+</code></pre>
+<img src="doc/images/architectv1.jpeg" />
 </div>
-<img src= 'doc/images/architectv1.jpeg"/>
-<!-- Version 2 Section -->
 <div class="version-toggle" onclick="toggleSection('v2')">
 <h2>🔸 Version 2 - Enhanced Implementation</h2>
 </div>
 <div class="collapsible" id="v2">
-<!-- Enhanced Version 2 Content Here -->
-
 <p>Version 2 improves security, observability, and AI response resilience:</p>
 <ul>
 <li><strong>Authentication:</strong> JWT via Lambda Authorizer</li>
 <li><strong>Fallback:</strong> If Claude 3.5 throttled, fallback to Claude v2</li>
 <li><strong>Monitoring:</strong> CloudWatch dashboards and X-Ray</li>
 </ul>
-
-<img src= 'doc/images/architectv2.jpeg"/>
-<pre>
+<img src="doc/images/architectv2.jpeg" />
+<pre><code>
 def lambda_handler(event, context):
     model_id = json.loads(event['body']).get('modelId', "anthropic.claude-v2")
     try:
         return call_bedrock(model_id)
     except ThrottlingException:
         return call_bedrock("anthropic.claude-v2")
-</pre>
+</code></pre>
 </div>
-<!-- Unified Testing Section -->
 <h2>🧪 Comprehensive Test Cases</h2>
 <div class="test-case">
 <h3>🔐 Security Tests</h3>
-<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code>
 # JWT Validation Test
 def test_invalid_jwt():
     headers = {'Authorization': 'Bearer invalid.token'}
     response = client.post('/ask', headers=headers)
-    assert response.status_code == 403</pre>
+    assert response.status_code == 403
+</code></pre>
 </div>
-<!-- Improvement Suggestions -->
 <h2>🚀 Future Roadmap</h2>
 <div class="improvement">
 <h3>AI-Powered Threat Detection</h3>
-<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<pre><button class="copy-btn" onclick="copyCode(this)">Copy</button><code>
 # Example Threat Detection Snippet
 def detect_threat(prompt):
     threat_keywords = ['exploit', 'payload', 'csrf-token']
-    return any(keyword in prompt.lower() for keyword in threat_keywords)</pre>
+    return any(keyword in prompt.lower() for keyword in threat_keywords)
+</code></pre>
 </div>
 <script>
-        function toggleSection(id) {
-            const section = document.getElementById(id);
-            section.style.display = section.style.display === 'none' ? 'block' : 'none';
-        }
+    function toggleSection(id) {
+        const section = document.getElementById(id);
+        section.style.display = section.style.display === 'none' ? 'block' : 'none';
+    }
 
-        function copyCode(button) {
-            const code = button.parentElement.textContent;
-            navigator.clipboard.writeText(code.replace('Copy', ''));
-            button.textContent = 'Copied!';
-            setTimeout(() => button.textContent = 'Copy', 2000);
-        }
+    function copyCode(button) {
+        const code = button.parentElement.querySelector('code').innerText;
+        navigator.clipboard.writeText(code);
+        button.textContent = 'Copied!';
+        setTimeout(() => button.textContent = 'Copy', 2000);
+    }
 
-        // Print-friendly version
-        window.addEventListener('keydown', (e) => {
-            if (e.ctrlKey && e.key === 'p') {
-                document.body.classList.add('print-mode');
-            }
-        });
-    </script>
+    window.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.key === 'p') {
+            document.body.classList.add('print-mode');
+        }
+    });
+</script>
 </body>
 </html>
