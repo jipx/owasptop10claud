@@ -116,7 +116,7 @@ def lambda_handler(event, context):
         "body": json.dumps({"output": response})
     }
 </code></pre>
-<img src="doc/images/architectv1.jpeg" />
+<img src="images/architectv1.jpeg" />
 </div>
 <div class="version-toggle" onclick="toggleSection('v2')">
 <h2>🔸 Version 2 - Enhanced Implementation</h2>
@@ -128,7 +128,7 @@ def lambda_handler(event, context):
 <li><strong>Fallback:</strong> If Claude 3.5 throttled, fallback to Claude v2</li>
 <li><strong>Monitoring:</strong> CloudWatch dashboards and X-Ray</li>
 </ul>
-<img src="doc/images/architectv2.jpeg" />
+<img src="images/architectv2.jpeg" />
 <pre><code>
 def lambda_handler(event, context):
     model_id = json.loads(event['body']).get('modelId', "anthropic.claude-v2")
