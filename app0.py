@@ -1,10 +1,80 @@
+# Updated app.py with fixed login flow and UI rendering
+
 import streamlit as st
 import requests
+import urllib.parse
 import json
 import streamlit.components.v1 as components
 from admin_panel import admin_settings_panel
 
+# === App Layout ===
 st.set_page_config(page_title="OWASP AI Assistant", layout="wide")
+
+# === Cognito Config ===
+COGNITO_DOMAIN = st.secrets["COGNITO_DOMAIN"]
+CLIENT_ID = st.secrets["CLIENT_ID"]
+REDIRECT_URI = st.secrets["REDIRECT_URI"]
+
+# === Auth Utilities ===
+def get_login_url():
+    return (
+        f"{COGNITO_DOMAIN}/oauth2/authorize?response_type=code"
+        f"&client_id={CLIENT_ID}&redirect_uri={urllib.parse.quote(REDIRECT_URI)}"
+        f"&scope=openid+profile+email"
+    )
+
+def exchange_code_for_token(code):
+    token_url = f"{COGNITO_DOMAIN}/oauth2/token"
+    data = {
+        "grant_type": "authorization_code",
+        "client_id": CLIENT_ID,
+        "code": code,
+        "redirect_uri": REDIRECT_URI,
+    }
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    response = requests.post(token_url, data=data, headers=headers)
+    return response.json()
+
+# === Main Auth Logic ===
+query_params = st.query_params
+if "code" in query_params:
+    token_info = exchange_code_for_token(query_params["code"][0])
+    if "id_token" in token_info:
+        st.session_state["id_token"] = token_info["id_token"]
+        st.session_state["access_token"] = token_info.get("access_token")
+        st.session_state["logged_in"] = True
+        st.experimental_set_query_params()
+    else:
+        st.error("Login failed. Please try again.")
+
+# === Login/Logout Buttons ===
+if st.session_state.get("logged_in"):
+    st.success("Logged in with Cognito!")
+    import jwt
+    try:
+        decoded_token = jwt.decode(st.session_state["id_token"], options={"verify_signature": False})
+        email = decoded_token.get("email", "N/A")
+        sub = decoded_token.get("sub", "N/A")
+        st.sidebar.markdown("### 👤 Profile Info")
+        st.sidebar.write(f"**Email:** {email}")
+        st.sidebar.write(f"**User ID:** {sub}")
+    except Exception as e:
+        st.sidebar.error("Failed to decode ID token.")
+        st.sidebar.write(str(e))
+
+    if st.button("Logout"):
+        st.session_state.clear()
+        st.experimental_rerun()
+else:
+    login_url = get_login_url()
+    signup_url = f"{COGNITO_DOMAIN}/signup?client_id={CLIENT_ID}&response_type=code&scope=openid+profile+email&redirect_uri={urllib.parse.quote(REDIRECT_URI)}"
+
+    st.markdown(f"""
+    <a href="{login_url}" target="_self"><button>Login with Cognito</button></a>
+    <a href="{signup_url}" target="_self"><button>Sign Up</button></a>
+    """, unsafe_allow_html=True)
+
+
 
 def speak_text(text):
     js = f"""
