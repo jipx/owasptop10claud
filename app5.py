@@ -60,17 +60,16 @@ if page == "🧠 Adaptive Quiz":
         quiz_prompt = f"Generate a {difficulty.lower()} level multiple choice question on {topic}. Include 4 options and indicate the correct answer."
         with st.spinner("Generating quiz..."):
             try:
-                # Only Adaptive Quiz uses this endpoint
                 response = requests.post(
-                    "https://lkb0sv5un2.execute-api.ap-northeast-1.amazonaws.com/prod/invoke",
-                    json={"input": quiz_prompt},
+                    "https://5olh8uhg6b.execute-api.ap-northeast-1.amazonaws.com/prod/ask",
+                    json={"prompt": quiz_prompt, "modelId": selected_model_id},
                     headers={"Content-Type": "application/json"}
                 )
                 result = response.json()
-                output = result.get("completion") or result.get("error") or result or "[No output returned]"
+                output = result.get("response") or result.get("error") or result or "[No output returned]"
                 if response.status_code == 200:
                     st.markdown(output, unsafe_allow_html=True)
-                    if st.button("🔊 Read aloud", key="read_response_quiz"):
+                    if st.button("🔊 Read aloud", key="read_response"):
                         speak_text(output)
                 else:
                     st.error(f"API Error {response.status_code}")
@@ -109,7 +108,7 @@ else:
                         if response.status_code == 200:
                             st.success("Model Response:")
                             st.markdown(output, unsafe_allow_html=True)
-                            if st.button("🔊 Read aloud", key="read_response_owasp"):
+                            if st.button("🔊 Read aloud", key="read_response"):
                                 speak_text(output)
                         else:
                             st.error(f"API Error {response.status_code}")

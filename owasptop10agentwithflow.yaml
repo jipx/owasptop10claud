@@ -1,0 +1,145 @@
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: OWASPTOP10AdaptiveQuizAgent with Flow, Language Filter, Strict Scope, Lambda, API Gateway
+
+Parameters:
+  FoundationModel:
+    Type: String
+    Default: anthropic.claude-3-sonnet-20240229-v1:0
+    Description: "Choose the foundation model for the agent"
+    AllowedValues:
+      - anthropic.claude-3-opus-20240229-v1:0
+      - anthropic.claude-3-sonnet-20240229-v1:0
+      - anthropic.claude-3-haiku-20240307-v1:0
+      - amazon.titan-text-express-v1
+      - amazon.titan-text-lite-v1
+      - mistral.mistral-7b-instruct-v0:1
+      - meta.llama2-13b-chat-v1
+      - meta.llama3-70b-instruct-v1:0
+      - cohere.command-r-plus-v1:0
+
+Resources:
+
+  OWASPAgent:
+    Type: AWS::Bedrock::Agent
+    Properties:
+      AgentName: "OWASPTOP10AdaptiveQuizAgent"
+      Instruction: |
+        You are OWASPTOP10AdaptiveQuizAgent, a cybersecurity mentor focused only on the OWASP Top 10.
+        ✅ You may: Explain OWASP Top 10, show vulnerable and secure code (Python or Node.js), generate adaptive quizzes.
+        ❌ You must NOT: Answer general cybersecurity, AI, cloud, or unrelated questions.
+        For unrelated input, say: "I'm designed only to help with OWASP Top 10 topics like XSS, SQLi, and other web security issues."
+        Use markdown, fenced code blocks, and keep tone educational.
+      FoundationModel: !Ref FoundationModel
+      AutoPrepareModel: true
+
+  OWASPAgentAlias:
+    Type: AWS::Bedrock::AgentAlias
+    Properties:
+      AgentId: !Ref OWASPAgent
+      AgentAliasName: "default"
+
+  BedrockInvokeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: BedrockInvokeRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: BedrockInvokePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock-agent:InvokeAgent
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+
+  BedrockAgentInvokeFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: InvokeOWASPTOP10Agent
+      Runtime: python3.10
+      Handler: index.lambda_handler
+      Role: !GetAtt BedrockInvokeRole.Arn
+      Timeout: 10
+      Environment:
+        Variables:
+          AGENT_ID: !Ref OWASPAgent
+          ALIAS_ID: !GetAtt OWASPAgentAlias.AgentAliasId
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+
+          def lambda_handler(event, context):
+              agent_id = os.environ.get("AGENT_ID")
+              alias_id = os.environ.get("ALIAS_ID")
+              session_id = "user-session-1"
+              input_text = json.loads(event['body']).get("input", "")
+
+              client = boto3.client("bedrock-agent-runtime")
+              response = client.invoke_agent(
+                  agentId=agent_id,
+                  agentAliasId=alias_id,
+                  sessionId=session_id,
+                  inputText=input_text
+              )
+
+              return {
+                  "statusCode": 200,
+                  "headers": {"Content-Type": "application/json"},
+                  "body": json.dumps({"completion": response['completion']['content']})
+              }
+
+  APIGateway:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: OWASPTOP10AgentAPI
+
+  APIGatewayResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref APIGateway
+      ParentId: !GetAtt APIGateway.RootResourceId
+      PathPart: invoke
+
+  APIGatewayMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref APIGateway
+      ResourceId: !Ref APIGatewayResource
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaArn}/invocations
+        LambdaArn: !GetAtt BedrockAgentInvokeFunction.Arn
+        PassthroughBehavior: WHEN_NO_MATCH
+        ContentHandling: CONVERT_TO_TEXT
+        IntegrationResponses:
+          - StatusCode: 200
+      MethodResponses:
+        - StatusCode: 200
+
+  LambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref BedrockAgentInvokeFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${APIGateway}/*/*/*
